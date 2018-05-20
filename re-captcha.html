@@ -35,7 +35,17 @@ BEWARE: THE re-captcha ELEMENT ONLY WORKS IN THE DOM OR LIGHT DOM OF ANOTHER COM
 <script>
   Recaptcha = (function () {
     'use strict';
-    var SCRIPT_LOADED = false;
+
+    var SCRIPT_LOADED = false;  
+	var SCRIPT_CALLBACK_INVOKED = false;
+  
+    window.___recaptchaOnloadCallback = function() { 
+                                                     SCRIPT_CALLBACK_INVOKED = true;
+													 window.___recaptchaOnloadCallback.subscribers.forEach(f => f()) 
+                                                   }
+    window.___recaptchaOnloadCallback.subscribers = [];
+    window.___recaptchaOnloadCallback.subscribe = function(f) { if(SCRIPT_CALLBACK_INVOKED) f(); else window.___recaptchaOnloadCallback.subscribers.push(f) };
+  
     var constructor = Polymer({
       is: 're-captcha',
 
@@ -242,11 +252,14 @@ BEWARE: THE re-captcha ELEMENT ONLY WORKS IN THE DOM OR LIGHT DOM OF ANOTHER COM
           script.setAttribute('defer', '');
           script.setAttribute('type', 'text/javascript');
           script.setAttribute('src', this._API_URL);
+      
+      var additionalAttrs = "&render=explicit&onload=___recaptchaOnloadCallback"
+      
           if (!this.lang) {
-            script.setAttribute('src', this._API_URL);
+            script.setAttribute('src', this._API_URL + additionalAttrs);
           }
           else {
-            script.setAttribute('src', this._API_URL + '?hl=' + this.lang);
+            script.setAttribute('src', this._API_URL + '?hl=' + this.lang + additionalAttrs);
           }
           head.appendChild(script);
           SCRIPT_LOADED = true;
@@ -284,23 +297,26 @@ BEWARE: THE re-captcha ELEMENT ONLY WORKS IN THE DOM OR LIGHT DOM OF ANOTHER COM
         }
       },
       _renderWhenApiReady: function () {
-        if (!window.grecaptcha) {
-          //Check if we can try again according to timeout
-          if (this._delay < this.timeout) {
-            setTimeout(function () {
-              this._renderWhenApiReady()
-            }.bind(this), this._RETRY_DELAY);
-            //increment delay to check timeout
-            this._delay += this._RETRY_DELAY;
-          }
+        window.___recaptchaOnloadCallback.subscribe(function() {
+          if (!window.grecaptcha) {
+            //Check if we can try again according to timeout
+            if (this._delay < this.timeout) {
+              setTimeout(function () {
+                this._renderWhenApiReady()
+              }.bind(this), this._RETRY_DELAY);
+              //increment delay to check timeout
+              this._delay += this._RETRY_DELAY;
+            }
+            else {
+              //We reach the timeout value
+            }
+	      }
           else {
-            //We reach the timeout value
+            this._render();
           }
-        }
-        else {
-          this._render();
-        }
+		}.bind(this))
       },
+	  
       /**
        * The `captcha-rendered` event is fired whenever the captcha widget is rendered.
        *
